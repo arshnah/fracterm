@@ -1,6 +1,14 @@
 mod fractal;
 mod render;
 
+// Below this, `center + pixel_offset * scale` stops resolving to distinct
+// f64 values near a center around magnitude 1 (f64 has ~2.22e-16 relative
+// precision), so every pixel samples the same point and the screen goes
+// uniformly black instead of showing anything. Zooming further than this
+// needs arbitrary-precision or perturbation-based rendering, neither of
+// which this renders with plain f64 math.
+const MIN_SCALE: f64 = 1e-13;
+
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, size, EnterAlternateScreen, LeaveAlternateScreen,
@@ -68,7 +76,7 @@ fn main() -> std::io::Result<()> {
                         dirty = true;
                     }
                     KeyCode::Char('+') | KeyCode::Char('=') => {
-                        view.scale *= 0.7;
+                        view.scale = (view.scale * 0.7).max(MIN_SCALE);
                         dirty = true;
                     }
                     KeyCode::Char('-') | KeyCode::Char('_') => {
@@ -113,8 +121,9 @@ fn status_line(view: &View) -> String {
         Mode::Mandelbrot => "mandelbrot",
         Mode::Julia { .. } => "julia",
     };
+    let scale_note = if view.scale <= MIN_SCALE { " (max zoom, f64 precision limit)" } else { "" };
     format!(
-        "\x1b[0m{} | re {:.6} im {:.6} | scale {:.2e} | iter {} | arrows pan  +/- zoom  j toggle  [/] iter  r reset  q quit",
-        mode, view.center_re, view.center_im, view.scale, view.max_iter
+        "\x1b[0m{} | re {:.6} im {:.6} | scale {:.2e}{} | iter {} | arrows pan  +/- zoom  j toggle  [/] iter  r reset  q quit",
+        mode, view.center_re, view.center_im, view.scale, scale_note, view.max_iter
     )
 }
